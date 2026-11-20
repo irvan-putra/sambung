@@ -43,6 +43,9 @@ separate future work and is not claimed here.
   `sdk/`, with a native clipboard/share bridge and a share-target entry point.
 - `tests/` - Node unit tests for the SDK (`node --test tests/test_sambung.mjs`).
 - `tools/` - the family launcher-icon tool (badged with the version).
+- `docs/research/` - public research notes with sources and confidence
+  labels, starting with what consumer AI subscriptions allow outside their
+  own apps (`docs/research/provider-subscription-routes.md`).
 
 ## Using the SDK in another app
 
