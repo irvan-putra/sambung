@@ -74,4 +74,5 @@ jobs:
             ${{ runner.temp }}/sambung-logcat.txt
             ${{ runner.temp }}/sambung-runtime-1.png
             ${{ runner.temp }}/sambung-runtime-2.png
+            ${{ runner.temp }}/sambung-runtime-3.png
           if-no-files-found: ignore
