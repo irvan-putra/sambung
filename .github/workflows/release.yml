@@ -93,6 +93,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      # gh release create --generate-notes shells out to git; it fails in a
+      # bare workspace, so check out the repo first.
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: candidate-apk
