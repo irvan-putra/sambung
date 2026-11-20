@@ -87,7 +87,9 @@ jobs:
       candidate_apk_artifact: candidate-apk
 
   publish:
-    needs: candidate-bytes
+    # needs release too: needs.release.outputs.tag resolves only for jobs in
+    # this list; candidate-bytes alone left TAG empty at publish time.
+    needs: [candidate-bytes, release]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
