@@ -1,9 +1,14 @@
 name: release
 
 on:
-  push:
-    tags: ["v*"]
+  # Human-dispatched only (family rule: no automatic releases). Pass the tag
+  # to create; it must match versionName in android/app/build.gradle.
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "release tag, e.g. v0.1.0 (must match versionName)"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -13,7 +18,7 @@ jobs:
     # patuh pre-publish source gate: package, version format, label,
     # permission/license drift, family icon geometry, badge reads the
     # candidate version. A failure stops the release before anything builds.
-    uses: irvan-putra/patuh/.github/workflows/release-gate.yml@7d8d0523f22046b71c0a2e0419d852219bed8a77
+    uses: irvan-putra/patuh/.github/workflows/release-gate.yml@4e064163e62a3cf677e11de016ffbb6f4041816b
     with:
       app: sambung
       published: false
@@ -42,7 +47,7 @@ jobs:
         run: |
           VER=$(sed -n 's/^[[:space:]]*versionName "\(.*\)"/\1/p' android/app/build.gradle | head -1)
           test -n "$VER"
-          TAG="${GITHUB_REF_NAME}"
+          TAG="${{ inputs.tag }}"
           if [ "$TAG" != "v$VER" ]; then
             echo "tag $TAG does not match versionName $VER"
             exit 1
@@ -75,7 +80,7 @@ jobs:
     # logged for the sidecar) before anything is published. This is the
     # preventive boundary: a defect here stops the release.
     needs: release
-    uses: irvan-putra/patuh/.github/workflows/release-gate.yml@7d8d0523f22046b71c0a2e0419d852219bed8a77
+    uses: irvan-putra/patuh/.github/workflows/release-gate.yml@4e064163e62a3cf677e11de016ffbb6f4041816b
     with:
       app: sambung
       published: false
@@ -97,14 +102,14 @@ jobs:
           TAG="${{ needs.release.outputs.tag }}"
           APK="sambung-${TAG}.apk"
           gh release create "$TAG" "dist/$APK" "dist/$APK.sha256" \
-            --title "$TAG" --generate-notes || \
+            --title "$TAG" --generate-notes --target "${{ github.sha }}" || \
           gh release upload "$TAG" "dist/$APK" "dist/$APK.sha256" --clobber
 
   verify:
     # post-publish: verifies the live release (tag, APK name, checksum,
     # downloaded sha256, packaged icon). Detects, cannot undo.
     needs: publish
-    uses: irvan-putra/patuh/.github/workflows/release-gate.yml@7d8d0523f22046b71c0a2e0419d852219bed8a77
+    uses: irvan-putra/patuh/.github/workflows/release-gate.yml@4e064163e62a3cf677e11de016ffbb6f4041816b
     with:
       app: sambung
       published: true
