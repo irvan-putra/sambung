@@ -26,6 +26,8 @@ const customOpt = document.createElement("option");
 customOpt.value = "custom";
 customOpt.textContent = "custom JSON shape";
 els.template.appendChild(customOpt);
+// Default reply shape: the checked JSON list, not the free-text note.
+els.template.value = "items";
 
 function currentSchema() {
   if (els.template.value === "custom") {

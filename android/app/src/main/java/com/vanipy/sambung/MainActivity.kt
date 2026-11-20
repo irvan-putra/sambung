@@ -20,6 +20,7 @@ class MainActivity : Activity() {
 
     internal lateinit var webView: WebView
     private var pendingSharedText: String? = null
+    private var shareDeliveryAttempts = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -95,9 +96,19 @@ class MainActivity : Activity() {
         val text = pendingSharedText ?: return
         if (!::webView.isInitialized) return
         // Hand the shared text to the page's reply box; JSON-quote for safety.
-        val js = "window.sambungReceive && window.sambungReceive(" +
-            JSONObject.quote(text) + ")"
-        webView.evaluateJavascript(js) { }
-        pendingSharedText = null
+        // onCreate and onPageFinished can fire before the page's module
+        // scripts ran, so only drop the pending text once the page confirms
+        // receipt; retry briefly while sambungReceive is not there yet.
+        val js = "window.sambungReceive ? (window.sambungReceive(" +
+            JSONObject.quote(text) + "), 'ok') : 'not-ready'"
+        webView.evaluateJavascript(js) { result ->
+            if (result != null && result.contains("ok")) {
+                pendingSharedText = null
+                shareDeliveryAttempts = 0
+            } else if (pendingSharedText != null && shareDeliveryAttempts < 20) {
+                shareDeliveryAttempts++
+                webView.postDelayed({ deliverPendingShare() }, 250)
+            }
+        }
     }
 }
