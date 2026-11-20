@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>sambung - carry a request to any assistant, check the reply</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, sans-serif; max-width: 52rem; margin: 0 auto;
+         padding: 1rem; line-height: 1.45; }
+  h1 { font-size: 1.4rem; margin-bottom: 0; }
+  h1 .sub { font-weight: normal; font-size: 0.9rem; opacity: 0.75; }
+  h2 { font-size: 1.05rem; margin: 1.4rem 0 0.4rem; }
+  label { display: block; font-size: 0.9rem; margin-top: 0.6rem; }
+  input[type=text], textarea, select { width: 100%; box-sizing: border-box;
+         font-family: ui-monospace, monospace; font-size: 0.85rem;
+         padding: 0.5rem; border: 1px solid #8886; border-radius: 6px;
+         background: transparent; color: inherit; margin-top: 0.2rem; }
+  textarea { min-height: 5rem; }
+  textarea.tall { min-height: 12rem; }
+  button { font: inherit; padding: 0.45rem 0.9rem; margin: 0.3rem 0.3rem 0.3rem 0;
+           border: 1px solid #8888; border-radius: 6px; background: transparent;
+           color: inherit; cursor: pointer; }
+  button.primary { background: #5f3dc4; border-color: #5f3dc4; color: #fff; }
+  button:disabled { opacity: 0.5; cursor: default; }
+  #status { white-space: pre-wrap; font-family: ui-monospace, monospace;
+            font-size: 0.85rem; padding: 0.5rem; border-radius: 6px; display: none; }
+  #status.ok { background: #2b8a3e22; display: block; }
+  #status.err { background: #c92a2a22; display: block; }
+  .note { font-size: 0.85rem; opacity: 0.75; }
+  .hidden { display: none; }
+  #history li { font-size: 0.85rem; margin-bottom: 0.3rem; }
+  #history button { padding: 0.1rem 0.5rem; font-size: 0.8rem; }
+</style>
+</head>
+<body>
+<h1>sambung <span class="sub">carry a request to any assistant, check the reply</span></h1>
+<p class="note">sambung never contacts an AI service. It packs your request into
+a brief; you carry it to an assistant you already use (paste or share), then
+paste the reply back here. Replies are checked against the expected shape
+before you use them. Everything stays on this device.</p>
+
+<h2>1. the request</h2>
+<label>what the app needs
+  <textarea id="task" spellcheck="false" placeholder="e.g. suggest three names for a playlist about rain"></textarea>
+</label>
+<label>context the assistant should see (optional)
+  <textarea id="context" spellcheck="false" placeholder="e.g. current list: monsoon, drizzle"></textarea>
+</label>
+<label>expected reply shape
+  <select id="template"></select>
+</label>
+<label id="customSchemaRow" class="hidden">custom reply shape (JSON schema)
+  <textarea id="customSchema" spellcheck="false" placeholder='{"type":"object","required":["answer"],"additionalProperties":false,"properties":{"answer":{"type":"string"}}}'></textarea>
+</label>
+<label>requesting app name (optional)
+  <input type="text" id="appName" placeholder="e.g. denting">
+</label>
+
+<h2>2. the brief to carry</h2>
+<textarea id="brief" class="tall" readonly spellcheck="false"></textarea>
+<div>
+  <button id="copyBrief" class="primary">copy brief</button>
+  <button id="shareBrief">share brief</button>
+  <span class="note">paste or share this into any assistant you use.</span>
+</div>
+
+<h2>3. the reply</h2>
+<textarea id="reply" class="tall" spellcheck="false" placeholder="paste the assistant's reply here"></textarea>
+<div>
+  <button id="checkReply" class="primary">check reply</button>
+  <span class="note">checking only reads the text; nothing else happens.</span>
+</div>
+<div id="status"></div>
+
+<div id="resultBlock" class="hidden">
+<h2>4. the checked result</h2>
+<textarea id="result" class="tall" readonly spellcheck="false"></textarea>
+<div>
+  <button id="copyResult" class="primary">copy result</button>
+  <button id="shareResult">share result</button>
+</div>
+</div>
+
+<h2>history <span class="note">(this device only)</span></h2>
+<ul id="history"></ul>
+<button id="clearHistory" class="hidden">clear history</button>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

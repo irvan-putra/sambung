@@ -1,0 +1,9 @@
+# build outputs
+build/
+**/build/
+.local.properties
+local.properties
+
+# web app + SDK are synced into assets at build time (single source of truth
+# lives in ../web and ../sdk, see android/app/build.gradle)
+android/app/src/main/assets/

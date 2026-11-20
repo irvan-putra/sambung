@@ -1,0 +1,8 @@
+{
+  "name": "sambung",
+  "version": "0.1.0",
+  "description": "Manual AI handoff: package a request for any assistant, carry it yourself, validate the reply before use.",
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "main": "sambung.js"
+}

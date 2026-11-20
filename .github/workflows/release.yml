@@ -1,0 +1,110 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  consistency:
+    # patuh pre-publish source gate: package, version format, label,
+    # permission/license drift, family icon geometry, badge reads the
+    # candidate version. A failure stops the release before anything builds.
+    uses: irvan-putra/patuh/.github/workflows/release-gate.yml@7d8d0523f22046b71c0a2e0419d852219bed8a77
+    with:
+      app: sambung
+      published: false
+
+  release:
+    needs: consistency
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      tag: ${{ steps.v.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.7"
+      - name: decode keystore
+        env:
+          SIGNING_KEYSTORE_B64: ${{ secrets.SIGNING_KEYSTORE_B64 }}
+        run: echo "$SIGNING_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/keystore.jks"
+      - name: verify tag matches versionName
+        id: v
+        run: |
+          VER=$(sed -n 's/^[[:space:]]*versionName "\(.*\)"/\1/p' android/app/build.gradle | head -1)
+          test -n "$VER"
+          TAG="${GITHUB_REF_NAME}"
+          if [ "$TAG" != "v$VER" ]; then
+            echo "tag $TAG does not match versionName $VER"
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+      - name: build signed release APK
+        env:
+          SIGNING_KEYSTORE_PATH: ${{ runner.temp }}/keystore.jks
+          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+        run: gradle -p android :app:assembleRelease
+      - name: stage candidate APK with family filename and checksum sidecar
+        run: |
+          TAG="${{ steps.v.outputs.tag }}"
+          APK="sambung-${TAG}.apk"
+          cp android/app/build/outputs/apk/release/app-release.apk "$APK"
+          ( cd android/app/build/outputs/apk/release && sha256sum app-release.apk ) | sed "s|app-release.apk|$APK|" > "$APK.sha256"
+      - name: upload candidate for the byte check
+        uses: actions/upload-artifact@v4
+        with:
+          name: candidate-apk
+          path: |
+            sambung-*.apk
+            sambung-*.apk.sha256
+          retention-days: 1
+
+  candidate-bytes:
+    # patuh checks the built APK's actual bytes (packaged icon badge, sha256
+    # logged for the sidecar) before anything is published. This is the
+    # preventive boundary: a defect here stops the release.
+    needs: release
+    uses: irvan-putra/patuh/.github/workflows/release-gate.yml@7d8d0523f22046b71c0a2e0419d852219bed8a77
+    with:
+      app: sambung
+      published: false
+      candidate_apk_artifact: candidate-apk
+
+  publish:
+    needs: candidate-bytes
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: candidate-apk
+          path: dist
+      - name: create GitHub release with APK
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ needs.release.outputs.tag }}"
+          APK="sambung-${TAG}.apk"
+          gh release create "$TAG" "dist/$APK" "dist/$APK.sha256" \
+            --title "$TAG" --generate-notes || \
+          gh release upload "$TAG" "dist/$APK" "dist/$APK.sha256" --clobber
+
+  verify:
+    # post-publish: verifies the live release (tag, APK name, checksum,
+    # downloaded sha256, packaged icon). Detects, cannot undo.
+    needs: publish
+    uses: irvan-putra/patuh/.github/workflows/release-gate.yml@7d8d0523f22046b71c0a2e0419d852219bed8a77
+    with:
+      app: sambung
+      published: true
