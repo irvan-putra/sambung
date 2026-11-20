@@ -140,9 +140,17 @@ els.checkReply.addEventListener("click", () => {
                   reply: els.reply.value, result: pretty, at: new Date().toISOString() };
   els.result.value = pretty;
   els.resultBlock.classList.remove("hidden");
-  showStatus("ok", "reply passed the check" +
-    (r.source !== "whole" && schema ? " (JSON found inside the reply text)" : "") +
-    ". review it below before you use it.");
+  if (schema) {
+    showStatus("ok", "reply passed the check" +
+      (r.source !== "whole" ? " (JSON found inside the reply text)" : "") +
+      ". review it below before you use it.");
+  } else {
+    // Plain note mode has no schema, so nothing was validated. Say so
+    // plainly instead of implying the text passed a check.
+    showStatus("ok", "plain note mode: no reply shape is set, so this reply " +
+      "was not checked. the text below is exactly what the assistant sent; " +
+      "review it yourself before you use it.");
+  }
   saveHistory(lastChecked);
 });
 
