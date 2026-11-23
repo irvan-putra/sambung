@@ -7,6 +7,10 @@ plain-text brief that *you* carry to any assistant you already use (paste it,
 or share it through the Android share sheet), then checks the assistant's
 reply against the expected shape before you use it.
 
+Try the web version at [vanipy.com/sambung](https://vanipy.com/sambung/);
+signed Android APKs with SHA-256 sidecars are on the
+[releases page](https://github.com/irvan-putra/sambung/releases). AGPL-3.0.
+
 ## What it does
 
 - **Build a brief**: the request, optional context, and the exact reply shape
