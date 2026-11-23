@@ -4,7 +4,7 @@
          It never contacts an AI service; the person carries the text. -->
     <application
         android:label="sambung"
-        android:icon="@mipmap/ic_launcher"
+        android:icon="@drawable/ic_launcher"
         android:supportsRtl="true">
         <activity
             android:name=".MainActivity"
