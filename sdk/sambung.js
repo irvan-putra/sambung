@@ -141,30 +141,49 @@ function buildBrief({ task, context, replySchema, appName, extraRules } = {}) {
 // ---------------------------------------------------------------------------
 
 // Find the first balanced {...} or [...] block, respecting strings and escapes.
-function extractBalanced(text) {
-  const start = text.search(/[{[]/);
-  if (start === -1) return null;
-  const open = text[start];
-  const close = open === "{" ? "}" : "]";
-  let depth = 0;
-  let inString = false;
-  let escaped = false;
-  for (let i = start; i < text.length; i++) {
-    const ch = text[i];
-    if (inString) {
-      if (escaped) escaped = false;
-      else if (ch === "\\") escaped = true;
-      else if (ch === '"') inString = false;
-      continue;
+// If `searchFrom` is provided (number), the search for the opening bracket starts
+// from that index. Returns the block string or null.
+function extractBalanced(text, searchFrom) {
+  const startIdx = typeof searchFrom === "number" && searchFrom >= 0 ? searchFrom : 0;
+  let idx = startIdx;
+
+  // Helper to find the next balanced block starting at or after `pos`
+  const findNext = (pos) => {
+    const start = text.slice(pos).search(/[{[]/);
+    if (start === -1) return null;
+    const actualStart = pos + start;
+    const open = text[actualStart];
+    const close = open === "{" ? "}" : "]";
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+
+    for (let i = actualStart; i < text.length; i++) {
+      const ch = text[i];
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (ch === "\\") escaped = true;
+        else if (ch === '"') inString = false;
+        continue;
+      }
+      if (ch === '"') inString = true;
+      else if (ch === open) depth++;
+      else if (ch === close) {
+        depth--;
+        if (depth === 0) {
+          return {
+            block: text.slice(actualStart, i + 1),
+            nextPos: i + 1
+          };
+        }
+      }
     }
-    if (ch === '"') inString = true;
-    else if (ch === open) depth++;
-    else if (ch === close) {
-      depth--;
-      if (depth === 0) return text.slice(start, i + 1);
-    }
-  }
-  return null;
+    return null;
+  };
+
+  const result = findNext(idx);
+  if (!result) return null;
+  return result.block;
 }
 
 function tryParseJson(text) {
@@ -189,34 +208,86 @@ function parseReply(text, schema) {
   }
 
   const trimmed = text.trim();
-  const attempts = [{ label: "whole", candidate: trimmed }];
 
+  // Track the most useful failure: validation errors beat parse errors.
+  let bestValidationErrors = null;
+  let bestParseError = null;
+  let sawAnyBalanced = false;
+
+  // 1. Try whole text
+  const wholeParse = tryParseJson(trimmed);
+  if (wholeParse.ok) {
+    const errors = validate(wholeParse.data, schema);
+    if (errors.length === 0) return { ok: true, data: wholeParse.data, source: "whole" };
+    bestValidationErrors = errors;
+  } else {
+    // Keep as potential bestParseError, but later candidates might be better
+    // We'll compare "closeness" later if needed, but for now record it
+    bestParseError = "reply is not valid JSON (" + wholeParse.error + ")";
+  }
+
+  // 2. Try fenced block
   const fence = trimmed.match(/```(?:json)?\s*\n([\s\S]*?)```/);
-  if (fence) attempts.push({ label: "fenced", candidate: fence[1].trim() });
-
-  const balanced = extractBalanced(trimmed);
-  if (balanced && !attempts.some((a) => a.candidate === balanced)) {
-    attempts.push({ label: "extracted", candidate: balanced });
+  if (fence) {
+    const candidate = fence[1].trim();
+    const parsed = tryParseJson(candidate);
+    if (parsed.ok) {
+      const errors = validate(parsed.data, schema);
+      if (errors.length === 0) return { ok: true, data: parsed.data, source: "fenced" };
+      if (bestValidationErrors === null) bestValidationErrors = errors;
+    }
   }
 
-  let parseError = "reply contains no JSON";
-  let validationErrors = null;
-  for (const attempt of attempts) {
-    const parsed = tryParseJson(attempt.candidate);
-    if (!parsed.ok) {
-      parseError = "reply is not valid JSON (" + parsed.error + ")";
-      continue;
+  // 3. Try successive balanced blocks (Bug A fix)
+  // We iterate through all balanced blocks in the text.
+  let searchFrom = 0;
+  while (searchFrom < trimmed.length) {
+    const block = extractBalanced(trimmed, searchFrom);
+    if (!block) break;
+
+    sawAnyBalanced = true;
+
+    // Advance past this block: it starts at the next bracket after searchFrom
+    // and spans block.length characters.
+    const remaining = trimmed.slice(searchFrom);
+    const blockStartInRemaining = remaining.search(/[{[]/);
+    if (blockStartInRemaining === -1) break;
+    searchFrom = searchFrom + blockStartInRemaining + block.length;
+
+    // Skip candidates already tried as "whole" or "fenced".
+    if (block === trimmed) continue;
+    if (fence && block === fence[1].trim()) continue;
+
+    const parsed = tryParseJson(block);
+    if (parsed.ok) {
+      const errors = validate(parsed.data, schema);
+      if (errors.length === 0) return { ok: true, data: parsed.data, source: "extracted" };
+      // Bug B: Prefer validation errors from the candidate that parsed
+      if (bestValidationErrors === null) {
+        bestValidationErrors = errors;
+      }
+    } else if (bestParseError === null) {
+      bestParseError = "reply is not valid JSON (" + parsed.error + ")";
     }
-    const errors = validate(parsed.data, schema);
-    if (errors.length === 0) {
-      return { ok: true, data: parsed.data, source: attempt.label };
-    }
-    if (validationErrors === null) validationErrors = errors;
   }
-  if (validationErrors !== null) return { ok: false, errors: validationErrors };
-  // Clearer message when the reply has no JSON-looking content at all.
-  if (!/[{[]/.test(trimmed)) return { ok: false, errors: ["reply contains no JSON"] };
-  return { ok: false, errors: [parseError] };
+
+  // Determine final error (Bug B)
+  if (bestValidationErrors !== null) {
+    return { ok: false, errors: bestValidationErrors };
+  }
+
+  // If no JSON-looking content was found at all
+  if (!sawAnyBalanced && !wholeParse.ok && !fence && !/[{[]/.test(trimmed)) {
+    return { ok: false, errors: ["reply contains no JSON"] };
+  }
+
+  // If we have a parse error
+  if (bestParseError) {
+    return { ok: false, errors: [bestParseError] };
+  }
+
+  // Fallback
+  return { ok: false, errors: ["reply is not valid JSON"] };
 }
 
 // ---------------------------------------------------------------------------

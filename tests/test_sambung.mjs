@@ -163,3 +163,46 @@ test("extractBalanced respects strings and escapes", () => {
   assert.equal(extractBalanced("no json here"), null);
   assert.equal(extractBalanced("[1, 2, [3]] tail"), "[1, 2, [3]]");
 });
+
+// --- Bug A: Prose bracket before real JSON ---
+
+test("Bug A: extractBalanced skips leading non-JSON brackets in parseReply", () => {
+  // The leading "[1]" is a balanced block, but not valid JSON for the schema.
+  // The real JSON follows.
+  const reply = 'Sure! [1] {"items": ["a", "b"]}';
+  const r = parseReply(reply, itemsSchema);
+  assert.equal(r.ok, true, "Should find the valid JSON after the prose bracket");
+  assert.equal(r.source, "extracted");
+  assert.deepEqual(r.data, { items: ["a", "b"] });
+});
+
+test("Bug A: multiple balanced blocks, first invalid, second valid", () => {
+  // First block is valid JSON but fails schema (wrong type). Second block passes.
+  const reply = '{"wrong": true} {"items": ["ok"]}';
+  const r = parseReply(reply, itemsSchema);
+  assert.equal(r.ok, true, "Should find the valid JSON in the second block");
+  assert.equal(r.source, "extracted");
+  assert.deepEqual(r.data, { items: ["ok"] });
+});
+
+// --- Bug B: Error reporting distinguishes candidates ---
+
+test("Bug B: error message distinguishes 'no JSON' from 'shape mismatch'", () => {
+  // No JSON at all
+  const noJson = parseReply("Just text.", itemsSchema);
+  assert.equal(noJson.ok, false);
+  assert.match(noJson.errors[0], /no JSON/);
+
+  // JSON found, but shape mismatch (valid JSON, wrong schema)
+  const badShape = parseReply('{"wrong": 1}', itemsSchema);
+  assert.equal(badShape.ok, false);
+  // Should NOT say "no JSON". Should mention missing required field.
+  assert.doesNotMatch(badShape.errors[0], /no JSON/);
+  assert.ok(badShape.errors.some((e) => /missing required field/.test(e)));
+});
+
+test("Bug B: parse error reported when JSON is broken", () => {
+  const broken = parseReply('{"items": [1,}', itemsSchema);
+  assert.equal(broken.ok, false);
+  assert.match(broken.errors[0], /not valid JSON/);
+});
